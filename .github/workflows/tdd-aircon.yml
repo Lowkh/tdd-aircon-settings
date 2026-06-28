@@ -12,7 +12,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     outputs:
-      pytest_error: ${{ steps.pytest_output.outputs.pytest_error }}
+      pytest_output: ${{ steps.pytest_output.outputs.pytest_output }}
 
     steps:
       - name: Checkout repository
@@ -36,15 +36,12 @@ jobs:
           echo "PYTEST_EXIT_CODE=$exit_code" >> "$GITHUB_ENV"
           exit 0
 
-      - name: Extract pytest output snippet
+      - name: Extract pytest output
         id: pytest_output
         if: always()
         run: |
-          {
-            echo "pytest_error<<EOF"
-            tail -n 20 pytest.log
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          snippet=$(tail -n 12 pytest.log | tr '\n' ' ' | sed 's/"/\\"/g')
+          echo "pytest_output=$snippet" >> "$GITHUB_OUTPUT"
 
       - name: Fail job if pytest failed
         if: env.PYTEST_EXIT_CODE != '0'
@@ -57,18 +54,18 @@ jobs:
 
     steps:
       - name: Send Discord notification
-        uses: appleboy/discord-action@v1.2.0
+        uses: Bilfet/discord-webhook-message@v1
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          color: "#5865F2"
-          username: "GitHub Actions"
-          message: |
-            Workflow: TDD Aircon Settings CI
+          username: GitHub Actions
+          content: "Workflow result: ${{ needs.test.result }}"
+          embed_title: "TDD Aircon Settings CI"
+          embed_description: |
             Repository: ${{ github.repository }}
             Branch: ${{ github.ref_name }}
             Actor: ${{ github.actor }}
-            Result: ${{ needs.test.result }}
             Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
             Pytest output:
-            ${{ needs.test.outputs.pytest_error }}
+            ${{ needs.test.outputs.pytest_output }}
+          embed_color: FF5733
