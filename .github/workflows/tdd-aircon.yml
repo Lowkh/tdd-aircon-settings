@@ -11,6 +11,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    outputs:
+      pytest_error: ${{ steps.pytest_output.outputs.pytest_error }}
 
     steps:
       - name: Checkout repository
@@ -26,17 +28,54 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest
 
-      - name: Run pytest suites
-        run: pytest
+      - name: Run pytest and capture output
+        id: run_pytest
+        run: |
+          set +e
+          pytest 2>&1 | tee pytest.log
+          exit_code=${PIPESTATUS[0]}
+          echo "PYTEST_EXIT_CODE=$exit_code" >> $GITHUB_ENV
+          exit 0
 
-  notify-discord-on-failure:
+      - name: Extract pytest error snippet
+        id: pytest_output
+        if: always()
+        run: |
+          {
+            echo "pytest_error<<EOF"
+            tail -n 40 pytest.log
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Fail job if pytest failed
+        if: env.PYTEST_EXIT_CODE != '0'
+        run: exit 1
+
+  notify-discord:
     runs-on: ubuntu-latest
     needs: test
-    if: failure()
+    if: always()
 
     steps:
-      - name: Send failed job notification to Discord
-        uses: lacherogwu/failed-jobs-discord-notification-action@v1
-        with:
-          discord_webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          needs_json: ${{ toJSON(needs) }}
+      - name: Notify Discord on failure
+        if: ${{ needs.test.result == 'failure' }}
+        uses: th0th/notify-discord@v0.4.1
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_JOB_NAME: "TDD Aircon Settings CI"
+          GITHUB_JOB_STATUS: ${{ needs.test.result }}
+          DISCORD_EMBEDS: |
+            [
+              {
+                "title": "Pytest failed",
+                "color": 15158332,
+                "description": "**Repository:** ${{ github.repository }}\n**Branch:** `${{ github.ref_name }}`\n**Actor:** `${{ github.actor }}`\n**Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "fields": [
+                  {
+                    "name": "Error snippet",
+                    "value": "```text\n${{ needs.test.outputs.pytest_error }}\n```"
+                  }
+                ]
+              }
+            ]
