@@ -34,7 +34,7 @@ jobs:
           set +e
           pytest 2>&1 | tee pytest.log
           exit_code=${PIPESTATUS[0]}
-          echo "PYTEST_EXIT_CODE=$exit_code" >> $GITHUB_ENV
+          echo "PYTEST_EXIT_CODE=$exit_code" >> "$GITHUB_ENV"
           exit 0
 
       - name: Extract pytest error snippet
@@ -43,7 +43,7 @@ jobs:
         run: |
           {
             echo "pytest_error<<EOF"
-            tail -n 40 pytest.log
+            tail -n 25 pytest.log
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -54,28 +54,20 @@ jobs:
   notify-discord:
     runs-on: ubuntu-latest
     needs: test
-    if: always()
+    if: ${{ needs.test.result == 'failure' }}
 
     steps:
-      - name: Notify Discord on failure
-        if: ${{ needs.test.result == 'failure' }}
-        uses: th0th/notify-discord@v0.4.1
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_JOB_NAME: "TDD Aircon Settings CI"
-          GITHUB_JOB_STATUS: ${{ needs.test.result }}
-          DISCORD_EMBEDS: |
-            [
-              {
-                "title": "Pytest failed",
-                "color": 15158332,
-                "description": "**Repository:** ${{ github.repository }}\n**Branch:** `${{ github.ref_name }}`\n**Actor:** `${{ github.actor }}`\n**Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                "fields": [
-                  {
-                    "name": "Error snippet",
-                    "value": "```text\n${{ needs.test.outputs.pytest_error }}\n```"
-                  }
-                ]
-              }
-            ]
+      - name: Send failure details to Discord
+        uses: sarge841/action-discord-webhook@v1
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          embed_title: "Pytest failed"
+          embed_description: |
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Actor: ${{ github.actor }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Error snippet:
+            ${{ needs.test.outputs.pytest_error }}
+          embed_color: "15158332"
