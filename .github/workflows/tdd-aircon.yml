@@ -29,7 +29,6 @@ jobs:
           python -m pip install pytest
 
       - name: Run pytest and capture output
-        id: run_pytest
         run: |
           set +e
           pytest 2>&1 | tee pytest.log
@@ -37,13 +36,13 @@ jobs:
           echo "PYTEST_EXIT_CODE=$exit_code" >> "$GITHUB_ENV"
           exit 0
 
-      - name: Extract pytest error snippet
+      - name: Extract pytest output snippet
         id: pytest_output
         if: always()
         run: |
           {
             echo "pytest_error<<EOF"
-            tail -n 25 pytest.log
+            tail -n 20 pytest.log
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -54,20 +53,22 @@ jobs:
   notify-discord:
     runs-on: ubuntu-latest
     needs: test
-    if: ${{ needs.test.result == 'failure' }}
+    if: ${{ always() }}
 
     steps:
-      - name: Send failure details to Discord
-        uses: sarge841/action-discord-webhook@v1
+      - name: Send Discord notification
+        uses: appleboy/discord-action@v1.2.0
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          embed_title: "Pytest failed"
-          embed_description: |
+          color: "#5865F2"
+          username: "GitHub Actions"
+          message: |
+            Workflow: TDD Aircon Settings CI
             Repository: ${{ github.repository }}
             Branch: ${{ github.ref_name }}
             Actor: ${{ github.actor }}
+            Result: ${{ needs.test.result }}
             Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-            Error snippet:
+            Pytest output:
             ${{ needs.test.outputs.pytest_error }}
-          embed_color: "15158332"
