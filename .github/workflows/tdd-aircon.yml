@@ -1,4 +1,4 @@
-name: TDD Aircon Settings CI
+name: TDD Aircon Settings CI 
 
 on:
   push:
